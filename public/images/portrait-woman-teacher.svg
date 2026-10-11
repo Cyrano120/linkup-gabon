@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800">
+  <rect width="800" height="800" fill="#f7efe3"/>
+  <path d="M160 0h480v800H160z" fill="#009e60" opacity=".16"/>
+  <circle cx="400" cy="330" r="190" fill="#171717"/>
+  <circle cx="400" cy="370" r="130" fill="#6b3b24"/>
+  <path d="M245 705c22-132 106-206 155-206s133 74 155 206H245Z" fill="#8b1e3f"/>
+  <path d="M260 330c23-145 232-180 289-28-112-50-209-29-289 28Z" fill="#111"/>
+  <circle cx="350" cy="375" r="12" fill="#111"/><circle cx="450" cy="375" r="12" fill="#111"/>
+  <path d="M356 445c31 26 58 26 88 0" fill="none" stroke="#2b1710" stroke-width="13" stroke-linecap="round"/>
+  <rect x="268" y="595" width="264" height="70" rx="18" fill="#ffffff"/>
+  <text x="400" y="641" text-anchor="middle" font-family="Arial" font-size="34" font-weight="700" fill="#0f2f2a">Coach</text>
+</svg>

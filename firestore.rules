@@ -1,0 +1,45 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Fonction helper: vérifier si l'utilisateur est connecté
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    // Fonction helper: vérifier si l'utilisateur est le propriétaire
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
+    // Collection providers - lecture publique, écriture uniquement par utilisateur connecté
+    match /providers/{providerId} {
+      allow read: if true;
+      allow create: if isAuth() && request.resource.data.keys().hasAll(['name', 'role', 'price']);
+      allow update: if isAuth();
+      allow delete: if isAuth();
+    }
+
+    // Collection requests - lecture publique, écriture par utilisateur connecté
+    match /requests/{requestId} {
+      allow read: if true;
+      allow create: if isAuth() && request.resource.data.keys().hasAll(['title', 'budget', 'client']);
+      allow update: if isAuth();
+      allow delete: if isAuth();
+    }
+
+    // Collection messages - lecture/écriture par utilisateur connecté
+    match /messages/{messageId} {
+      allow read: if isAuth();
+      allow create: if isAuth() && request.resource.data.keys().hasAll(['from', 'subject', 'text']);
+      allow update: if isAuth();
+      allow delete: if isAuth();
+    }
+
+    // Collection users - chaque utilisateur ne peut lire/écrire que son propre document
+    match /users/{userId} {
+      allow read, write: if isAuth() && isOwner(userId);
+      allow create: if isAuth() && isOwner(userId);
+    }
+  }
+}

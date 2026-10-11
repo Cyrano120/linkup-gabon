@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800">
+  <rect width="800" height="800" fill="#071520"/>
+  <path d="M0 600 800 430v370H0z" fill="#3a75c4"/>
+  <circle cx="400" cy="345" r="145" fill="#60361f"/>
+  <path d="M268 705c25-138 92-213 132-213s107 75 132 213H268Z" fill="#111"/>
+  <path d="M280 284c45-98 200-100 240 0-84-30-160-30-240 0Z" fill="#0a0a0a"/>
+  <circle cx="350" cy="365" r="12" fill="#111"/><circle cx="450" cy="365" r="12" fill="#111"/>
+  <path d="M360 438c29 23 52 23 80 0" fill="none" stroke="#2b1710" stroke-width="13" stroke-linecap="round"/>
+  <rect x="525" y="505" width="120" height="80" rx="12" fill="#fcd116"/>
+  <circle cx="570" cy="545" r="22" fill="#0f2f2a"/>
+  <text x="400" y="644" text-anchor="middle" font-family="Arial" font-size="34" font-weight="700" fill="#fff">Video</text>
+</svg>

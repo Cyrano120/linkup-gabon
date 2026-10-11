@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800">
+  <rect width="800" height="800" fill="#0f2f2a"/>
+  <circle cx="400" cy="330" r="175" fill="#111"/>
+  <circle cx="400" cy="360" r="128" fill="#63351f"/>
+  <path d="M245 705c28-136 104-202 155-202s127 66 155 202H245Z" fill="#3a75c4"/>
+  <path d="M280 280c34-112 225-120 252 9-81-40-166-35-252-9Z" fill="#0a0a0a"/>
+  <circle cx="350" cy="365" r="12" fill="#111"/><circle cx="450" cy="365" r="12" fill="#111"/>
+  <path d="M354 438c34 23 61 23 92 0" fill="none" stroke="#2b1710" stroke-width="13" stroke-linecap="round"/>
+  <rect x="245" y="595" width="310" height="70" rx="18" fill="#fcd116"/>
+  <text x="400" y="641" text-anchor="middle" font-family="Arial" font-size="34" font-weight="700" fill="#0f2f2a">Technicien</text>
+</svg>
