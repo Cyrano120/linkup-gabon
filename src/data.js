@@ -176,7 +176,7 @@ export const initialRequests = [
     category: 'Informatique',
     budget: 10000,
     location: 'PK12',
-    urgency: 'Urgent',
+    urgency: "Aujourd'hui",
     status: 'Ouverte',
     client: 'Kevin',
     provider: 'En attente',
@@ -203,7 +203,7 @@ export const initialRequests = [
     budget: 12000,
     location: 'Glass',
     urgency: 'Demain',
-    status: 'Confirmee',
+    status: 'Confirmée',
     client: 'Mickael',
     provider: 'Maeva Rekangalt',
     candidates: ['Maeva Rekangalt', 'Nora Mba'],
@@ -213,7 +213,7 @@ export const initialRequests = [
 
 export const categories = ['Tous', 'Informatique', 'Cours', 'Livraison', 'Design & Web']
 
-export const statuses = ['Ouverte', 'En discussion', 'Confirmee', 'Terminee']
+export const statuses = ['Ouverte', 'En discussion', 'Confirmée', 'Terminée']
 
 export const serviceHighlights = [
   {
