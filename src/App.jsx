@@ -309,16 +309,16 @@ function App() {
                     De Nzeng-Ayong à Akanda, LinkUp connecte clients, étudiants et freelances pour des missions rapides payables en FCFA, Airtel Money ou Moov Money.
                   </p>
                   <div className="flex flex-wrap gap-4 mt-10">
-                    <button onClick={() => setActiveView('market')} className="h-12 px-5 bg-gradient-to-r from-gabon-green to-blue-500 text-white font-black rounded-xl shadow-lg hover:-translate-y-0.5 hover:shadow-2xl transition-all">
+                    <button onClick={() => setActiveView('market')} className="h-12 px-5 bg-gradient-to-r from-gabon-green-action to-blue-500 text-white font-black rounded-xl shadow-lg hover:-translate-y-0.5 hover:shadow-2xl transition-all">
                       Trouver un prestataire
                     </button>
-                    <button onClick={() => setActiveView('request')} className="h-12 px-5 bg-white/15 text-white font-black rounded-xl border border-white/30 backdrop-blur hover:-translate-y-0.5 transition-all">
+                    <button onClick={() => setActiveView('request')} className="h-12 px-5 bg-white/20 text-white font-black rounded-xl border border-white/30 hover:-translate-y-0.5 transition-all">
                       Publier une mission
                     </button>
                   </div>
                   <div className="flex flex-wrap gap-3 mt-6">
                     {['Libreville', 'Akanda', 'Owendo', 'Port-Gentil'].map((a) => (
-                      <span key={a} className="px-3 py-2 text-white bg-white/15 rounded-full border border-white/25 backdrop-blur text-sm font-bold animate-float">{a}</span>
+                      <span key={a} className="px-3 py-2 text-white bg-white/20 rounded-full border border-white/25 text-sm font-bold animate-float">{a}</span>
                     ))}
                   </div>
                 </div>
@@ -578,7 +578,7 @@ function App() {
                 Message
                 <textarea name="text" value={newMessage.text} onChange={handleMessageChange} rows="4" placeholder="Ex: Bonjour, je suis disponible demain à 15h..." className="px-4 py-3 rounded-xl border border-gray-200 bg-white outline-none focus:border-blue-500 resize-y" />
               </label>
-              <button type="submit" className="h-11 px-5 bg-gradient-to-r from-gabon-green to-blue-500 text-white font-black rounded-xl shadow-lg hover:-translate-y-0.5 transition-all w-fit">Envoyer</button>
+              <button type="submit" className="h-11 px-5 bg-gradient-to-r from-gabon-green-action to-blue-500 text-white font-black rounded-xl shadow-lg hover:-translate-y-0.5 transition-all w-fit">Envoyer</button>
             </form>
             <div className="space-y-3">
               {messages.map((msg) => (
@@ -615,7 +615,7 @@ function App() {
               </select></label>
             </div>
             <label className="grid gap-1 text-gray-700 font-bold">Lieu <input name="location" value={booking.location} onChange={handleBookingChange} className="h-11 px-4 rounded-xl border border-gray-200 outline-none focus:border-blue-500" /></label>
-            <button type="submit" className="w-full h-12 bg-gradient-to-r from-gabon-green to-blue-500 text-white font-black rounded-xl shadow-lg">Envoyer la demande</button>
+            <button type="submit" className="w-full h-12 bg-gradient-to-r from-gabon-green-action to-blue-500 text-white font-black rounded-xl shadow-lg">Envoyer la demande</button>
           </form>
         </div>
       )}
@@ -660,14 +660,14 @@ function App() {
                   {profileProvider.reviews.map((review) => (
                     <article key={review.client} className="p-3 bg-gray-50 border border-gray-200 rounded-xl">
                       <strong className="text-gray-900">{review.client}</strong>
-                      <span className="block text-amber-500 my-1">{'★'.repeat(review.rating)}</span>
+                      <span className="block text-amber-700 my-1">{'★'.repeat(review.rating)}</span>
                       <p className="text-gray-600 text-sm">{review.text}</p>
                     </article>
                   ))}
                 </div>
               </div>
             )}
-            <button onClick={() => { setProfileProvider(null); openBooking(profileProvider) }} className="w-full h-12 bg-gradient-to-r from-gabon-green to-blue-500 text-white font-black rounded-xl shadow-lg">
+            <button onClick={() => { setProfileProvider(null); openBooking(profileProvider) }} className="w-full h-12 bg-gradient-to-r from-gabon-green-action to-blue-500 text-white font-black rounded-xl shadow-lg">
               Contacter ce prestataire
             </button>
           </div>

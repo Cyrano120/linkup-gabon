@@ -34,7 +34,7 @@ function Login({ onToggleView }) {
           </label>
         </div>
 
-        <button type="submit" className="w-full h-12 bg-gradient-to-r from-gabon-green to-blue-500 text-white font-black rounded-xl shadow-lg hover:-translate-y-0.5 transition-all">
+        <button type="submit" className="w-full h-12 bg-gradient-to-r from-gabon-green-action to-blue-500 text-white font-black rounded-xl shadow-lg hover:-translate-y-0.5 transition-all">
           Se connecter
         </button>
 

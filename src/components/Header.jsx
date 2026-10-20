@@ -9,7 +9,7 @@ const navItems = [
 
 function Header({ activeView, onViewChange, user, onLogout }) {
   return (
-    <header className="sticky top-0 z-20 flex items-center justify-between gap-4 px-4 md:px-10 py-3 bg-white/80 border-b border-white/30 backdrop-blur-lg">
+    <header className="sticky top-0 z-20 flex items-center justify-between gap-4 px-4 md:px-10 py-3 bg-white/95 border-b border-white/40">
       <button className="flex items-center gap-2 text-gray-900 bg-transparent border-0 font-black" onClick={() => onViewChange('home')}>
         <span className="relative grid place-items-center w-11 h-11 gradient-gabon text-white rounded-2xl text-xs shadow-lg">
           <span className="absolute w-6 h-6 bg-white/90 rounded-full" style={{ borderRadius: '50% 50% 50% 0', transform: 'rotate(-45deg)' }} />
