@@ -8,11 +8,13 @@ import Footer from './components/Footer.jsx'
 import Login from './components/Login.jsx'
 import Register from './components/Register.jsx'
 import {
-  categories, initialMessages, initialProviders, initialRequests,
+  categories, initialProviders, initialRequests,
   howItWorksSteps, localAreas, pageStories, serviceHighlights, testimonials,
 } from './data.js'
 import { useAuth } from './AuthContext'
-import { subscribeToCollection, addDocument, updateDocument, seedCollection } from './firestore.js'
+import {
+  subscribeToCollection, subscribeToMessages, addDocument, updateDocument, seedCollection,
+} from './firestore.js'
 import { db } from './firebase.js'
 import { collection, getDocs, deleteDoc, doc } from 'firebase/firestore'
 import { sendNotification } from './email.js'
@@ -37,7 +39,7 @@ function App() {
     client: '', title: '', description: '', budget: '', location: '', urgency: "Aujourd'hui",
   })
   const [newMessage, setNewMessage] = useState({
-    from: '', to: '', subject: '', text: '',
+    to: '', toUid: '', subject: '', text: '',
   })
 
   useEffect(() => {
@@ -65,16 +67,25 @@ function App() {
 
   useEffect(() => {
     if (!user) return
-    const unsubMessages = subscribeToCollection('messages', (data) => setMessages(data))
+    // Le flux ne contient que les conversations de l'utilisateur connecté :
+    // le filtrage est fait par la requête (`participants array-contains`),
+    // donc aussi par les règles de sécurité Firestore.
+    const unsubMessages = subscribeToMessages(user.uid, (data) => setMessages(data))
     return () => unsubMessages()
   }, [user])
 
   async function seedInitialData() {
+    // Une mission amorcée doit porter un client identifiable.
     await Promise.all([
       seedCollection('providers', initialProviders),
-      seedCollection('requests', initialRequests.map((r) => ({ ...r, candidates: r.candidates || [], provider: r.provider || 'En attente' }))),
-      seedCollection('messages', initialMessages),
+      seedCollection('requests', initialRequests.map((r) => ({
+        ...r, candidates: r.candidates || [], provider: r.provider || 'En attente',
+        clientUid: user?.uid, candidateUids: [],
+      }))),
     ])
+    // Les messages ne sont plus amorcés : une conversation privée exige deux
+    // comptes réels. Inventer des participants produirait des documents
+    // illisibles, refusés par les règles de sécurité.
   }
 
   const filteredProviders = useMemo(() => {
@@ -96,7 +107,8 @@ function App() {
 
   async function addRequest(newRequest) {
     await addDocument('requests', {
-      ...newRequest, id: Date.now(), status: 'Ouverte', provider: 'En attente', candidates: [],
+      ...newRequest, id: Date.now(), status: 'Ouverte', provider: 'En attente',
+      candidates: [], candidateUids: [], clientUid: user?.uid,
     })
     setActiveView('missions')
     notify('Mission publiée avec succès.')
@@ -129,8 +141,16 @@ function App() {
     const req = requests.find((r) => r.id === requestId)
     if (!req) return
     if (req.candidates.includes(providerName)) { notify(`${providerName} a déjà postulé.`); return }
+
+    // `candidates` et `candidateUids` restent alignés : l'index du nom donne
+    // l'index de l'UID, ce qui permet de retrouver le candidat retenu.
+    const candidateUids = [...(req.candidateUids || [])]
+    const candidateUid = providers.find((p) => p.name === providerName)?.createdBy
+    if (candidateUid && !candidateUids.includes(candidateUid)) candidateUids.push(candidateUid)
+
     await updateDocument('requests', req._firestoreId, {
       candidates: [...req.candidates, providerName],
+      candidateUids,
       status: req.status === 'Ouverte' ? 'En discussion' : req.status,
     })
     notify(`${providerName} a postulé.`)
@@ -138,8 +158,25 @@ function App() {
 
   async function acceptCandidate(requestId, providerName) {
     const req = requests.find((r) => r.id === requestId)
-    if (req) await updateDocument('requests', req._firestoreId, { provider: providerName, status: 'Confirmée' })
-    await addDocument('messages', { id: Date.now(), from: 'LinkUp', to: providerName, subject: 'Mission confirmée', text: `${providerName} a été retenu.` })
+    if (!req) return
+
+    const index = req.candidates.indexOf(providerName)
+    const providerUid = req.candidateUids?.[index]
+      || providers.find((p) => p.name === providerName)?.createdBy
+
+    await updateDocument('requests', req._firestoreId, {
+      provider: providerName,
+      status: 'Confirmée',
+      ...(providerUid ? { providerUid } : {}),
+    })
+
+    if (user && providerUid && providerUid !== user.uid) {
+      await addDocument('messages', {
+        id: Date.now(), from: 'LinkUp', to: providerName, subject: 'Mission confirmée',
+        text: `${providerName} a été retenu.`,
+        fromUid: user.uid, toUid: providerUid, participants: [user.uid, providerUid],
+      })
+    }
     notify('Candidature acceptée.')
   }
 
@@ -153,19 +190,65 @@ function App() {
   async function submitBooking(e) {
     e.preventDefault()
     if (!booking.client || !booking.title || !booking.description || !booking.budget) { notify('Complète les champs obligatoires.'); return }
-    await addDocument('requests', { ...booking, id: Date.now(), category: selectedProvider.category, budget: Number(booking.budget), provider: selectedProvider.name, candidates: [selectedProvider.name], status: 'En discussion' })
+    const providerUid = selectedProvider.createdBy
+    await addDocument('requests', {
+      ...booking, id: Date.now(), category: selectedProvider.category, budget: Number(booking.budget),
+      provider: selectedProvider.name, candidates: [selectedProvider.name],
+      candidateUids: providerUid ? [providerUid] : [],
+      status: 'En discussion', clientUid: user?.uid,
+      ...(providerUid ? { providerUid } : {}),
+    })
     setSelectedProvider(null)
-    await addDocument('messages', { id: Date.now() + 1, from: booking.client, to: selectedProvider.name, subject: booking.title, text: `Nouvelle demande pour ${selectedProvider.name}.` })
+
+    // Conversation privée : seulement si le prestataire a un compte réel et
+    // si ce n'est pas l'utilisateur lui-même.
+    if (user && providerUid && providerUid !== user.uid) {
+      await addDocument('messages', {
+        id: Date.now() + 1, from: booking.client, to: selectedProvider.name,
+        subject: booking.title, text: `Nouvelle demande pour ${selectedProvider.name}.`,
+        fromUid: user.uid, toUid: providerUid, participants: [user.uid, providerUid],
+      })
+    }
     notify('Demande envoyée.')
   }
 
   function handleMessageChange(e) { setNewMessage((m) => ({ ...m, [e.target.name]: e.target.value })) }
 
+  /**
+   * Destinataire réel : on choisit un prestataire, pas un nom libre.
+   * Un message privé exige un UID de destinataire ; laisser saisir un nom
+   * produirait des messages que personne ne pourrait lire.
+   */
+  function handleRecipientChange(e) {
+    const provider = providers.find((p) => String(p.id) === e.target.value)
+    setNewMessage((m) => ({
+      ...m,
+      to: provider?.name || '',
+      toUid: provider?.createdBy || '',
+    }))
+  }
+
   async function sendMessage(e) {
     e.preventDefault()
-    if (!newMessage.from || !newMessage.to || !newMessage.subject || !newMessage.text) { notify('Remplis tous les champs.'); return }
-    await addDocument('messages', { id: Date.now(), ...newMessage })
-    setNewMessage({ from: '', to: '', subject: '', text: '' })
+    const from = user?.displayName || user?.email?.split('@')[0] || 'Client'
+    if (!newMessage.toUid || !newMessage.subject || !newMessage.text) {
+      notify('Choisis un destinataire, puis renseigne l’objet et le message.')
+      return
+    }
+    if (!user) { notify('Connecte-toi pour envoyer un message.'); return }
+    if (newMessage.toUid === user.uid) { notify('Tu ne peux pas t’écrire à toi-même.'); return }
+
+    await addDocument('messages', {
+      id: Date.now(),
+      from,
+      to: newMessage.to,
+      subject: newMessage.subject,
+      text: newMessage.text,
+      fromUid: user.uid,
+      toUid: newMessage.toUid,
+      participants: [user.uid, newMessage.toUid],
+    })
+    setNewMessage({ to: '', toUid: '', subject: '', text: '' })
     notify('Message envoyé.')
   }
 
@@ -454,11 +537,26 @@ function App() {
               <div className="grid md:grid-cols-2 gap-5">
                 <label className="grid gap-1 text-gray-700 font-bold">
                   Ton nom
-                  <input name="from" value={newMessage.from} onChange={handleMessageChange} className="h-11 px-4 rounded-xl border border-gray-200 bg-white outline-none focus:border-blue-500" />
+                  <input
+                    value={user?.displayName || user?.email?.split('@')[0] || ''}
+                    readOnly
+                    className="h-11 px-4 rounded-xl border border-gray-200 bg-gray-50 text-gray-500 outline-none"
+                  />
                 </label>
                 <label className="grid gap-1 text-gray-700 font-bold">
                   Destinataire
-                  <input name="to" value={newMessage.to} onChange={handleMessageChange} placeholder="Ex: Cedric Aworet" className="h-11 px-4 rounded-xl border border-gray-200 bg-white outline-none focus:border-blue-500" />
+                  <select
+                    value={providers.find((p) => p.createdBy === newMessage.toUid)?.id ?? ''}
+                    onChange={handleRecipientChange}
+                    className="h-11 px-4 rounded-xl border border-gray-200 bg-white outline-none focus:border-blue-500"
+                  >
+                    <option value="">Choisir un prestataire</option>
+                    {providers.map((provider) => (
+                      <option key={provider.id} value={provider.id} disabled={!provider.createdBy}>
+                        {provider.name}{provider.createdBy ? '' : ' (sans compte)'}
+                      </option>
+                    ))}
+                  </select>
                 </label>
               </div>
               <div className="grid md:grid-cols-2 gap-4">

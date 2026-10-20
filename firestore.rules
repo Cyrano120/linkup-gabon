@@ -1,45 +1,344 @@
 rules_version = '2';
+
+// ============================================================================
+//  Règles Firestore — LinkUp Gabon
+//  Partagées par les trois applications : web (Vercel), Expo, Flutter.
+//  Projet Firebase : linkup-gabon
+// ============================================================================
+//
+//  PRINCIPES
+//
+//  1. Refus par défaut. Aucune écriture n'est possible sans condition explicite.
+//  2. Toute écriture est attribuée à un utilisateur identifié : le document
+//     porte `createdBy`, et celui-ci doit valoir l'UID de l'appelant.
+//  3. Chaque document n'est modifiable que par une partie légitime :
+//     son auteur, le client de la mission, ou le prestataire retenu.
+//  4. Toute donnée entrante est validée : clés autorisées, types, bornes et
+//     valeurs énumérées.
+//  5. Un document non listé est inaccessible (voir le bloc final).
+//
+//  PIÈGE FIRESTORE — À CONNAÎTRE
+//
+//  Lire une clé absente sur une Map lève une erreur, ce qui refuse l'écriture
+//  ... mais sans message clair, et parfois de façon inattendue. Tous les accès
+//  à un champ facultatif passent donc par les fonctions `opt*`, et tous les
+//  accès à un champ du document EXISTANT sont gardés par `has(existing(), ...)`.
+//
+//  Cette seconde précaution n'est pas cosmétique : les documents présents en
+//  base avant la migration ne portent ni `createdBy`, ni `clientUid`, ni
+//  `fromUid`, ni `participants`. Sans garde, une tentative de modification
+//  produirait une erreur d'évaluation confuse ; avec garde, elle est
+//  proprement refusée.
+//
+//  ⚠️  DÉPLOIEMENT
+//
+//  Ces règles exigent que les trois applications écrivent `createdBy`,
+//  `clientUid`, `fromUid`/`toUid`/`participants`, et que les documents
+//  existants aient été migrés au préalable (voir docs/MODELE-DONNEES.md).
+//  Les déployer avant la migration rendrait les données existantes
+//  non modifiables. Les tests correspondants sont dans rules-tests/.
+//
+// ============================================================================
+
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Fonction helper: vérifier si l'utilisateur est connecté
-    function isAuth() {
+    // ---------------------------------------------------------------- session
+
+    function isSignedIn() {
       return request.auth != null;
     }
 
-    // Fonction helper: vérifier si l'utilisateur est le propriétaire
-    function isOwner(userId) {
-      return request.auth.uid == userId;
+    function uid() {
+      return request.auth.uid;
     }
 
-    // Collection providers - lecture publique, écriture uniquement par utilisateur connecté
+    // Adresse e-mail vérifiée. Disponible pour activer la vérification
+    // obligatoire lors d'une étape ultérieure.
+    function isVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // ------------------------------------------------- accès sûr aux champs
+    //
+    // Toute lecture d'un champ facultatif DOIT passer par ces fonctions.
+    // L'évaluation de `||` est court-circuitée : si la clé est absente,
+    // l'accès au champ n'a jamais lieu.
+
+    function has(data, key) {
+      return data.keys().hasAny([key]);
+    }
+
+    function optText(data, key, maxLen) {
+      return !has(data, key)
+        || (data[key] is string && data[key].size() <= maxLen);
+    }
+
+    function optList(data, key, maxItems) {
+      return !has(data, key)
+        || (data[key] is list && data[key].size() <= maxItems);
+    }
+
+    function optInt(data, key, min, max) {
+      return !has(data, key)
+        || (data[key] is int && data[key] >= min && data[key] <= max);
+    }
+
+    function optNumber(data, key, min, max) {
+      return !has(data, key)
+        || ((data[key] is int || data[key] is float)
+            && data[key] >= min && data[key] <= max);
+    }
+
+    function optBool(data, key) {
+      return !has(data, key) || data[key] is bool;
+    }
+
+    function optEnum(data, key, allowed) {
+      return !has(data, key) || data[key] in allowed;
+    }
+
+    // Horodatage en millisecondes, borné à une plage plausible (1970 → 2100).
+    function optEpochMs(data, key) {
+      return optInt(data, key, 0, 4102444800000);
+    }
+
+    // ------------------------------------------------------------- providers
+
+    // Vitrine d'un prestataire.
+    // Lecture publique : le marché doit rester consultable sans compte.
+    // Création, modification et suppression réservées à l'auteur de la vitrine.
     match /providers/{providerId} {
       allow read: if true;
-      allow create: if isAuth() && request.resource.data.keys().hasAll(['name', 'role', 'price']);
-      allow update: if isAuth();
-      allow delete: if isAuth();
+
+      allow create: if isSignedIn()
+        && incoming().createdBy == uid()
+        && incoming().keys().hasAll(['name', 'role', 'category', 'price', 'createdBy'])
+        && incoming().keys().hasOnly([
+             'id', 'name', 'role', 'category', 'rating', 'missions', 'price',
+             'location', 'available', 'image', 'cover', 'responseTime',
+             'successRate', 'headline', 'bio', 'gallery', 'reviews', 'skills',
+             'createdBy', 'ownerUid', 'createdAt', 'updatedAt', 'seeded'
+           ])
+        && incoming().name is string && incoming().name.size() >= 2 && incoming().name.size() <= 80
+        && incoming().role is string && incoming().role.size() >= 2 && incoming().role.size() <= 80
+        && incoming().category is string && incoming().category.size() >= 2 && incoming().category.size() <= 40
+        && incoming().price is int && incoming().price >= 0 && incoming().price <= 10000000
+        && optText(incoming(), 'location', 60)
+        && optText(incoming(), 'headline', 160)
+        && optText(incoming(), 'bio', 2000)
+        && optText(incoming(), 'image', 1000)
+        && optText(incoming(), 'cover', 1000)
+        && optText(incoming(), 'responseTime', 40)
+        && optList(incoming(), 'gallery', 20)
+        && optList(incoming(), 'reviews', 200)
+        && optList(incoming(), 'skills', 30)
+        && optNumber(incoming(), 'rating', 0, 5)
+        && optInt(incoming(), 'missions', 0, 100000)
+        && optInt(incoming(), 'successRate', 0, 100)
+        && optBool(incoming(), 'available')
+        && optEpochMs(incoming(), 'createdAt')
+        && optEpochMs(incoming(), 'updatedAt');
+
+      allow update: if isSignedIn()
+        && has(existing(), 'createdBy')
+        && existing().createdBy == uid()
+        && incoming().createdBy == existing().createdBy
+        && incoming().keys().hasOnly([
+             'id', 'name', 'role', 'category', 'rating', 'missions', 'price',
+             'location', 'available', 'image', 'cover', 'responseTime',
+             'successRate', 'headline', 'bio', 'gallery', 'reviews', 'skills',
+             'createdBy', 'ownerUid', 'createdAt', 'updatedAt', 'seeded'
+           ])
+        && incoming().name is string && incoming().name.size() >= 2 && incoming().name.size() <= 80
+        && incoming().role is string && incoming().role.size() >= 2 && incoming().role.size() <= 80
+        && incoming().category is string && incoming().category.size() >= 2 && incoming().category.size() <= 40
+        && incoming().price is int && incoming().price >= 0 && incoming().price <= 10000000
+        && optText(incoming(), 'location', 60)
+        && optText(incoming(), 'headline', 160)
+        && optText(incoming(), 'bio', 2000)
+        && optList(incoming(), 'gallery', 20)
+        && optList(incoming(), 'reviews', 200)
+        && optList(incoming(), 'skills', 30)
+        && optNumber(incoming(), 'rating', 0, 5)
+        && optInt(incoming(), 'missions', 0, 100000)
+        && optInt(incoming(), 'successRate', 0, 100)
+        && optBool(incoming(), 'available')
+        && optEpochMs(incoming(), 'updatedAt');
+
+      allow delete: if isSignedIn()
+        && has(existing(), 'createdBy')
+        && existing().createdBy == uid();
     }
 
-    // Collection requests - lecture publique, écriture par utilisateur connecté
+    // -------------------------------------------------------------- requests
+
+    // Mission publiée par un client.
+    // Lecture publique ; écriture par le client auteur, le prestataire retenu,
+    // ou un candidat positionné sur la mission.
     match /requests/{requestId} {
       allow read: if true;
-      allow create: if isAuth() && request.resource.data.keys().hasAll(['title', 'budget', 'client']);
-      allow update: if isAuth();
-      allow delete: if isAuth();
+
+      allow create: if isSignedIn()
+        && incoming().createdBy == uid()
+        && incoming().clientUid == uid()
+        && incoming().keys().hasAll(['title', 'category', 'budget', 'description', 'createdBy', 'clientUid'])
+        && incoming().keys().hasOnly([
+             'id', 'title', 'category', 'budget', 'location', 'urgency', 'status',
+             'client', 'provider', 'candidates', 'description',
+             'createdBy', 'clientUid', 'providerUid', 'candidateUids',
+             'createdAt', 'updatedAt', 'seeded'
+           ])
+        && incoming().title is string && incoming().title.size() >= 3 && incoming().title.size() <= 120
+        && incoming().category is string && incoming().category.size() >= 2 && incoming().category.size() <= 40
+        && incoming().budget is int && incoming().budget >= 0 && incoming().budget <= 100000000
+        && incoming().description is string && incoming().description.size() <= 2000
+        && optText(incoming(), 'location', 60)
+        && optText(incoming(), 'client', 80)
+        && optText(incoming(), 'provider', 80)
+        && optList(incoming(), 'candidates', 50)
+        && optList(incoming(), 'candidateUids', 50)
+        && optEnum(incoming(), 'status', ['Ouverte', 'En discussion', 'Confirmée', 'Terminée'])
+        && optEnum(incoming(), 'urgency', ["Aujourd'hui", 'Demain', 'Cette semaine', 'Flexible'])
+        && optEpochMs(incoming(), 'createdAt')
+        && optEpochMs(incoming(), 'updatedAt');
+
+      allow update: if isSignedIn()
+        && has(existing(), 'createdBy')
+        && has(existing(), 'clientUid')
+        && incoming().createdBy == existing().createdBy
+        && incoming().clientUid == existing().clientUid
+        && (
+             existing().createdBy == uid()
+             || (has(existing(), 'providerUid') && existing().providerUid == uid())
+             || (has(existing(), 'candidateUids') && uid() in existing().candidateUids)
+           )
+        && incoming().keys().hasOnly([
+             'id', 'title', 'category', 'budget', 'location', 'urgency', 'status',
+             'client', 'provider', 'candidates', 'description',
+             'createdBy', 'clientUid', 'providerUid', 'candidateUids',
+             'createdAt', 'updatedAt', 'seeded'
+           ])
+        && incoming().title is string && incoming().title.size() >= 3 && incoming().title.size() <= 120
+        && incoming().budget is int && incoming().budget >= 0 && incoming().budget <= 100000000
+        && optText(incoming(), 'description', 2000)
+        && optText(incoming(), 'provider', 80)
+        && optList(incoming(), 'candidates', 50)
+        && optEnum(incoming(), 'status', ['Ouverte', 'En discussion', 'Confirmée', 'Terminée'])
+        && optEpochMs(incoming(), 'updatedAt');
+
+      allow delete: if isSignedIn()
+        && has(existing(), 'createdBy')
+        && existing().createdBy == uid();
     }
 
-    // Collection messages - lecture/écriture par utilisateur connecté
+    // -------------------------------------------------------------- messages
+
+    // Messagerie strictement privée.
+    // `participants` porte les deux UID et sert à la fois de contrôle d'accès
+    // et de clé de requête (`array-contains`).
     match /messages/{messageId} {
-      allow read: if isAuth();
-      allow create: if isAuth() && request.resource.data.keys().hasAll(['from', 'subject', 'text']);
-      allow update: if isAuth();
-      allow delete: if isAuth();
+      allow read: if isSignedIn()
+        && has(existing(), 'participants')
+        && uid() in existing().participants;
+
+      allow create: if isSignedIn()
+        && incoming().fromUid == uid()
+        && incoming().keys().hasAll(['fromUid', 'toUid', 'subject', 'text', 'participants'])
+        && incoming().keys().hasOnly([
+             'id', 'from', 'to', 'subject', 'text',
+             'fromUid', 'toUid', 'participants',
+             'createdBy', 'createdAt', 'updatedAt', 'readAt', 'seeded'
+           ])
+        // Les participants sont exactement l'expéditeur et le destinataire.
+        && incoming().participants == [incoming().fromUid, incoming().toUid]
+        && incoming().toUid != incoming().fromUid
+        && incoming().subject is string && incoming().subject.size() <= 140
+        && incoming().text is string && incoming().text.size() >= 1 && incoming().text.size() <= 4000
+        && optText(incoming(), 'from', 80)
+        && optText(incoming(), 'to', 80)
+        && optEpochMs(incoming(), 'createdAt')
+        && optEpochMs(incoming(), 'updatedAt');
+
+      // Seul l'expéditeur peut corriger son message, sans jamais pouvoir
+      // changer les participants ni le destinataire.
+      allow update: if isSignedIn()
+        && has(existing(), 'fromUid')
+        && has(existing(), 'toUid')
+        && has(existing(), 'participants')
+        && existing().fromUid == uid()
+        && incoming().fromUid == existing().fromUid
+        && incoming().toUid == existing().toUid
+        && incoming().participants == existing().participants
+        && incoming().keys().hasOnly([
+             'id', 'from', 'to', 'subject', 'text',
+             'fromUid', 'toUid', 'participants',
+             'createdBy', 'createdAt', 'updatedAt', 'readAt', 'seeded'
+           ])
+        && incoming().text is string && incoming().text.size() >= 1 && incoming().text.size() <= 4000
+        && optEpochMs(incoming(), 'updatedAt');
+
+      allow delete: if isSignedIn()
+        && has(existing(), 'fromUid')
+        && existing().fromUid == uid();
     }
 
-    // Collection users - chaque utilisateur ne peut lire/écrire que son propre document
+    // --------------------------------------------------------------- devices
+
+    // Jetons de notification : strictement privés à chaque appareil.
+    match /devices/{userId} {
+      allow read: if isSignedIn() && uid() == userId;
+
+      allow create, update: if isSignedIn()
+        && uid() == userId
+        && incoming().keys().hasAll(['userId', 'token'])
+        && incoming().userId == userId
+        && incoming().keys().hasOnly(['userId', 'token', 'platform', 'createdAt', 'updatedAt'])
+        && incoming().token is string
+        && incoming().token.size() >= 10
+        && incoming().token.size() <= 4096
+        && optEnum(incoming(), 'platform', ['android', 'ios', 'web'])
+        && optEpochMs(incoming(), 'createdAt')
+        && optEpochMs(incoming(), 'updatedAt');
+
+      allow delete: if isSignedIn() && uid() == userId;
+    }
+
+    // ----------------------------------------------------------------- users
+
+    // Profil : strictement privé à son titulaire.
     match /users/{userId} {
-      allow read, write: if isAuth() && isOwner(userId);
-      allow create: if isAuth() && isOwner(userId);
+      allow read, delete: if isSignedIn() && uid() == userId;
+
+      allow create, update: if isSignedIn()
+        && uid() == userId
+        && incoming().keys().hasOnly([
+             'uid', 'displayName', 'email', 'phone', 'city', 'district',
+             'role', 'verified', 'createdAt', 'updatedAt'
+           ])
+        && (!has(incoming(), 'uid') || incoming().uid == userId)
+        && optText(incoming(), 'displayName', 80)
+        && optText(incoming(), 'email', 160)
+        && optText(incoming(), 'phone', 30)
+        && optText(incoming(), 'city', 60)
+        && optText(incoming(), 'district', 60)
+        && optEnum(incoming(), 'role', ['client', 'provider', 'admin'])
+        && optBool(incoming(), 'verified')
+        && optEpochMs(incoming(), 'createdAt')
+        && optEpochMs(incoming(), 'updatedAt');
+    }
+
+    // Toute collection non déclarée ci-dessus est inaccessible.
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }
